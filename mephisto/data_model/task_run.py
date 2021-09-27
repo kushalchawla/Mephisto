@@ -144,7 +144,12 @@ class TaskRun(MephistoDataModelComponentMixin, metaclass=MephistoDBBackedMeta):
             is_self_set = map(lambda u: u.worker_id == worker.db_id, unit_set)
             if not any(is_self_set):
                 units += unit_set
-        valid_units = [u for u in units if u.get_status() == AssignmentState.LAUNCHED]
+        # Valid units must be launched and must not be special units (negative indices)
+        valid_units = [
+            u
+            for u in units
+            if u.get_status() == AssignmentState.LAUNCHED and u.unit_index >= 0
+        ]
         logger.debug(f"Found {len(valid_units)} available units")
 
         # Should load cached blueprint for SharedTaskState
@@ -201,10 +206,10 @@ class TaskRun(MephistoDataModelComponentMixin, metaclass=MephistoDBBackedMeta):
                 args = self.args
             else:
                 cache = True
-            if shared_state is None:
-                shared_state = SharedTaskState()
 
             BlueprintClass = get_blueprint_from_type(self.task_type)
+            if shared_state is None:
+                shared_state = BlueprintClass.SharedStateClass()
             if not cache:
                 return BlueprintClass(self, args, shared_state)
             self.__blueprint = BlueprintClass(self, args, shared_state)
@@ -292,7 +297,6 @@ class TaskRun(MephistoDataModelComponentMixin, metaclass=MephistoDBBackedMeta):
         of subassignments. If this task run has no subassignments yet, it
         is not complete
         """
-        # TODO(#99) revisit when/if it's possible to add tasks to a completed run
         if not self.__is_completed and self.get_has_assignments():
             statuses = self.get_assignment_statuses()
             has_incomplete = False
